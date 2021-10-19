@@ -55,6 +55,7 @@ int main(int argc, char* argv[])
 	int *x;
 	double *y;
 
+	/*Leggo le dimensioni della matrice*/
 	if(my_rank == 0){
 		printf("Inserisci #rows e #cols\n");
 		scanf("%d %d", &M, &N);
@@ -65,6 +66,7 @@ int main(int argc, char* argv[])
 	MPI_Bcast(&M, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+	/*Il processo 0 genera il vettore x e ne fa il bcast*/
 	x = malloc(N * sizeof(int));
 	if(my_rank == 0){
 		generateRandomIntVector(x, N);
@@ -74,10 +76,9 @@ int main(int argc, char* argv[])
 		}
 		printf("\n\n");
 	}
-	
 	MPI_Bcast(x, N, MPI_INT, 0, MPI_COMM_WORLD);
 
-
+	/*Ciascun processo calcola quali e quante righe della matrice deve gestire*/
 	int r = M%p;
 	int numRows, startRowIndex;
 	if(my_rank < r){
@@ -91,9 +92,11 @@ int main(int argc, char* argv[])
 	}
 //	printf("Process %d, startRowIndex = %d, numRows = %d\n", my_rank, startRowIndex, numRows);
 	
-	/* Ogni processo la sottomatrice corrispondente ad un certo numero di righe contigue della matrice */
+	/* Per ogni processo la sottomatrice gestita corrisponde ad un certo numero di righe contigue della matrice */
 	int partialM[numRows][N];
 	generateRandomIntMatrix(&partialM[0][0], numRows, N, my_rank);
+	
+	/*Stampo la sottomatrice - per la validazione del codice*/
 	char matrixString[1000];
 	char *startString = matrixString;
 	int w = sprintf(startString, "Processo %d\n", my_rank);
@@ -108,16 +111,17 @@ int main(int argc, char* argv[])
 	}
 	printf("%s\n", matrixString);
 
+	/*Ogni processo calcola la parte del vettore y che gli compete*/
 	double partialY[numRows];
-
-	
 	computePartialY(partialY, &partialM[0][0], numRows, x, N);
+	
 	/*
 	for(int l = 0; l < numRows; l++){
 		printf("Processo = %d, partialY[%d] = %lf\n", my_rank, l, partialY[l]);
 	}
-	
 	*/
+	
+	/*Il processo 0 calcola quanti elementi di y si aspetta di ricevere da ciascun processo e dunque il displacement degli elementi ricevuti all'interno del vettore*/
 	int elements = 0;
 	int displs[p];
 	int recvCounts[p];
@@ -139,11 +143,14 @@ int main(int argc, char* argv[])
 	}
 	
 	
-	
-	
-
+	/*Il processo 0 riceve i risultati parziali di y e li unisce in un unico vettore*/
 	MPI_Gatherv(partialY, numRows, MPI_DOUBLE, y, recvCounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	
+	/*Per fare in modo che l'ultima cosa stampata sia y*/
+	fflush(stdout);
 	MPI_Barrier(MPI_COMM_WORLD);
+	
+	/*Il processo 0 stampa y - per la validazione*/
 	if(my_rank == 0){
 		printf("y = \n"); 
 		for(int m = 0; m < N; m++){

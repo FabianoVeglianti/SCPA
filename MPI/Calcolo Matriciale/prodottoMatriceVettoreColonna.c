@@ -55,6 +55,7 @@ int main(int argc, char* argv[])
 	int *x;
 	double *y;
 
+	/*Leggo la dimensione della matrice*/
 	if(my_rank == 0){
 		printf("Inserisci #rows e #cols\n");
 		scanf("%d %d", &M, &N);
@@ -65,6 +66,7 @@ int main(int argc, char* argv[])
 	MPI_Bcast(&M, 1, MPI_INT, 0, MPI_COMM_WORLD);
 	MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+	/*Genero x e ne faccio il bcast*/
 	x = malloc(N * sizeof(int));
 	if(my_rank == 0){
 		generateRandomIntVector(x, N);
@@ -74,10 +76,9 @@ int main(int argc, char* argv[])
 		}
 		printf("\n\n");
 	}
-	
 	MPI_Bcast(x, N, MPI_INT, 0, MPI_COMM_WORLD);
 
-
+	/*Ciascun processo si calcola quali e quante colonne della matrice generare*/
 	int r = N%p;
 	int numCols, startColsIndex;
 	if(my_rank < r){
@@ -91,10 +92,11 @@ int main(int argc, char* argv[])
 	}
 //	printf("Process %d, startRowIndex = %d, numRows = %d\n", my_rank, startRowIndex, numRows);
 	
-	/* Ogni processo la sottomatrice corrispondente ad un certo numero di colonne contigue della matrice */
+	/* Per processo la sottomatrice gestita corrisponde ad un certo numero di colonne contigue della matrice */
 	int partialM[M][numCols];
 	generateRandomIntMatrix(&partialM[0][0], M, numCols, my_rank);
 	
+	/*Stampo la sottomatrice - per la validazione del codice*/
 	char matrixString[1000];
 	char *startString = matrixString;
 	int w = sprintf(startString, "Processo %d\n", my_rank);
@@ -109,46 +111,23 @@ int main(int argc, char* argv[])
 	}
 	printf("%s\n", matrixString);
 
+	/*Calcolo il contributo a y del processo*/
 	double contributeToY[M];
-
-	
 	computeContributeToY(contributeToY, &partialM[0][0], M, x, N, numCols, startColsIndex);
 	
+	/*Stampo il contributo a y del processo - per la validazione*/
 	for(int l = 0; l < M; l++){
 		printf("Processo = %d, partialY[%d] = %lf\n", my_rank, l, contributeToY[l]);
 	}
-	
-	
-	int elements = 0;
-	int displs[p];
-	int recvCounts[p];
-	if(my_rank == 0){
-		for(int k = 0; k < p; k ++){
-			if(k < r){
-				recvCounts[k] = M/p + 1;
-				if(k == 0){
-					displs[k] = 0;
-				} else {
-					displs[k] = displs[k-1] + recvCounts[k-1];
-				}
-			} else {
-				recvCounts[k] = M/p;
-				displs[k] = displs[k-1] + recvCounts[k-1];
-			}
-//			printf("recv[%d] = %d, displs[%d] = %d\n", k, recvCounts[k], k, displs[k]);
-		}
-	}
-	
-	
-	
-	
-
+		
+	/*Sommo i contributi a y di ciascun processo*/
 	MPI_Reduce(contributeToY, y, M,  MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 	
+	/*Per fare in modo che l'ultima cosa stampata sia y, MA NON FUNZIONA*/
 	fflush(stdout);
-	
 	MPI_Barrier(MPI_COMM_WORLD);
 	
+	/*Il processo 0 stampa y - per la validazione*/
 	if(my_rank == 0){
 		printf("y = \n"); 
 		for(int m = 0; m < N; m++){
